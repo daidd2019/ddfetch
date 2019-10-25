@@ -19,7 +19,7 @@ var g_watchdir = "."
 var g_filter = regexp.MustCompile("log$")
 
 var g_file_hander_maxtime = 10 * time.Minute
-var g_file_close_maxtime = 2 * time.Hour
+var g_file_close_maxtime = 6 * time.Hour
 
 type FileChanges struct {
 	AppName     string
