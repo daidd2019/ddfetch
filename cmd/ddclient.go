@@ -7,15 +7,16 @@ import (
 )
 
 var (
-	ddserv   = flag.String("server", "10.247.32.250:8888", "dd serve ip:port")
+	ddserv   = flag.String("server", "127.0.0.1:8888", "dd serve ip:port")
 	app      = flag.String("app", "test", "app name")
 	watchdir = flag.String("watch", ".", "track dir")
+	filter   = flag.String("filter", ".*", "file filter regexp like log$|txt$ default all file")
 )
 
 func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU() / 2)
 	filem := new(client.AppWatch)
-	filem.Init(*ddserv, *app, *watchdir)
+	filem.Init(*ddserv, *app, *watchdir, *filter)
 	filem.Start()
 }

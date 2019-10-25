@@ -8,12 +8,14 @@ import (
 	"net/rpc/jsonrpc"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 )
 
-var g_rpcaddress = "10.247.32.250:8888"
-var g_watchdir = ""
+var g_rpcaddress = "127.0.0.1:8888"
+var g_watchdir = "."
+var g_filter = regexp.MustCompile("log$")
 
 type FileChanges struct {
 	AppName     string
@@ -140,7 +142,7 @@ type AppWatch struct {
 	files   sync.Map
 }
 
-func (fm *AppWatch) Init(ip string, appname string, basedir string) {
+func (fm *AppWatch) Init(ip, appname, basedir, filter string) {
 	fm.Appname = appname
 	g_watchdir = filepath.FromSlash(basedir)
 	var err error
@@ -162,6 +164,7 @@ func (fm *AppWatch) Init(ip string, appname string, basedir string) {
 
 	fm.files = sync.Map{}
 	g_rpcaddress = ip
+	g_filter = regexp.MustCompile(filter)
 }
 
 func (fm *AppWatch) process_event(event fsnotify.Event) {
@@ -186,13 +189,15 @@ func (fm *AppWatch) process_event(event fsnotify.Event) {
 		}
 
 	case fsnotify.Write:
-		if v, ok := fm.files.Load(event.Name); ok {
-			fc := v.(*FileChanges)
-			fc.NotifyWrited()
-		} else {
-			fc := NewFileChanges(fm.Appname, event.Name)
-			fc.NotifyWrited()
-			fm.files.Store(event.Name, fc)
+		if g_filter.MatchString(event.Name) {
+			if v, ok := fm.files.Load(event.Name); ok {
+				fc := v.(*FileChanges)
+				fc.NotifyWrited()
+			} else {
+				fc := NewFileChanges(fm.Appname, event.Name)
+				fc.NotifyWrited()
+				fm.files.Store(event.Name, fc)
+			}
 		}
 	}
 }
