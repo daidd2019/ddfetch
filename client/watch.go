@@ -11,11 +11,15 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
 
 var g_rpcaddress = "127.0.0.1:8888"
 var g_watchdir = "."
 var g_filter = regexp.MustCompile("log$")
+
+var g_file_hander_maxtime = 10 * time.Minute
+var g_file_close_maxtime = 2 * time.Hour
 
 type FileChanges struct {
 	AppName     string
@@ -25,24 +29,26 @@ type FileChanges struct {
 	QuitRuntime chan bool
 	FileHander  *os.File
 	Pos         int64
+	WriteTime   int64
 }
 
 func (fc *FileChanges) CloseFileHander() {
 	if fc.FileHander != nil {
-		log.Println("close file hander ")
+		log.Println("close file", fc.FileName)
 		fc.FileHander.Close()
 		fc.FileHander = nil
 	}
 }
 
 func (fc *FileChanges) ClearChan() {
-	log.Println("clear file ", fc.FileName)
+	log.Println("clear chan file ", fc.FileName)
 	close(fc.Writed)
 	close(fc.CloseFile)
 	close(fc.QuitRuntime)
 }
 
 func (fc *FileChanges) NotifyWrited() {
+	fc.WriteTime = time.Now().Unix()
 	sendOnlyIfEmpty(fc.Writed)
 }
 
@@ -62,7 +68,8 @@ func sendOnlyIfEmpty(ch chan bool) {
 }
 
 func NewFileChanges(appName, fileName string) *FileChanges {
-	fc := FileChanges{appName, fileName, make(chan bool, 1), make(chan bool, 1), make(chan bool), nil, 0}
+	fc := FileChanges{appName, fileName, make(chan bool, 1), make(chan bool, 1), make(chan bool), nil, 0, time.Now().Unix()}
+
 	go func() {
 		conn, err := jsonrpc.Dial("tcp", g_rpcaddress)
 		if err != nil {
@@ -75,11 +82,14 @@ func NewFileChanges(appName, fileName string) *FileChanges {
 		dirName = strings.Replace(dirName, g_watchdir, "", 1)
 		localIp, _ := ExternalIP()
 
+		t1 := time.Tick(g_file_hander_maxtime)
+		fileMaxTime := int64(g_file_hander_maxtime / time.Second)
+
 		for {
 			select {
 			case <-fc.Writed:
 				if fc.FileHander == nil {
-					log.Println("track file ", fc.FileName)
+					log.Println("open file ", fc.FileName)
 					var err error
 					fc.FileHander, err = os.Open(fc.FileName)
 					if fc.Pos != 0 {
@@ -129,6 +139,12 @@ func NewFileChanges(appName, fileName string) *FileChanges {
 				fc.CloseFileHander()
 				fc.ClearChan()
 				return
+
+			case <-t1:
+				openTime := time.Now().Unix() - fc.WriteTime
+				if openTime >= fileMaxTime && fc.FileHander != nil {
+					fc.CloseFileHander()
+				}
 			}
 		}
 	}()
@@ -150,7 +166,10 @@ func (fm *AppWatch) Init(ip, appname, basedir, filter string) {
 	if err != nil {
 		log.Fatal("create watcher error", err)
 	}
+	fm.files = sync.Map{}
 	fm.Wdone = make(chan bool)
+	t2 := time.Tick(g_file_close_maxtime)
+	filetick := int64(g_file_close_maxtime / time.Second)
 	go func() {
 		for {
 			select {
@@ -158,11 +177,21 @@ func (fm *AppWatch) Init(ip, appname, basedir, filter string) {
 				fm.process_event(event)
 			case err := <-fm.Watcher.Errors:
 				log.Println("watch error:", err)
+			case <-t2:
+				fm.files.Range(func(k, v interface{}) bool {
+					fc := v.(*FileChanges)
+					fileMaxTime := time.Now().Unix() - fc.WriteTime
+					if fileMaxTime > filetick {
+						fc.NotifyQuit()
+						fm.files.Delete(k)
+						return false
+					}
+					return true
+				})
 			}
 		}
 	}()
 
-	fm.files = sync.Map{}
 	g_rpcaddress = ip
 	g_filter = regexp.MustCompile(filter)
 }
