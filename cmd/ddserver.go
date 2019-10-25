@@ -6,11 +6,12 @@ import (
 )
 
 var (
-	port = flag.String("port", "8888", "server port")
-	keep = flag.String("keep", "/tmp", "keep path")
+	port      = flag.String("port", "8888", "server port")
+	keep      = flag.String("keep", "/tmp", "keep path")
+	clearTime = flag.Int64("cleartime", 30, "clear file max time")
 )
 
 func main() {
 	flag.Parse()
-	server.Start(*port, *keep)
+	server.Start(*port, *keep, *clearTime)
 }
