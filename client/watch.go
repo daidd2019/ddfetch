@@ -104,7 +104,7 @@ func NewFileChanges(appName, fileName string) *FileChanges {
 
 				}
 				if conn != nil {
-					buffer := make([]byte, 1024)
+					buffer := make([]byte, 4096)
 
 					stat, _ := fc.FileHander.Stat()
 					size := stat.Size()
