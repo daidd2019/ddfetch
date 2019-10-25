@@ -7,9 +7,9 @@ import (
 	"net/rpc/jsonrpc"
 )
 
-func Start(port, keepPath string) {
+func Start(port, keepPath string, fileCloseTime int64) {
 
-	if err := rpc.Register(NewMsgSave(keepPath)); err != nil {
+	if err := rpc.Register(NewMsgSave(keepPath, fileCloseTime)); err != nil {
 		panic(nil)
 	}
 	address := "0.0.0.0:" + port

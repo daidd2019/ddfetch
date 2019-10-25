@@ -4,12 +4,13 @@ import (
 	"github.com/daidd2019/ddfetch/model"
 	"log"
 	"os"
+	"sync"
 	"time"
 )
 
 type MsgSave struct {
-	KeepDir string
-	Files   map[string]*FileInfo
+	KeepDir  string
+	MapFiles sync.Map
 }
 
 type FileInfo struct {
@@ -39,7 +40,7 @@ func NewFileInfo(app, basepath, subpath, filename, host string) *FileInfo {
 
 }
 
-func NewMsgSave(keepDir string) *MsgSave {
+func NewMsgSave(keepDir string, fileCloseTime int64) *MsgSave {
 	if exist, err := PathExists(keepDir); err == nil {
 		if !exist {
 			os.Mkdir(keepDir, os.ModePerm)
@@ -47,7 +48,25 @@ func NewMsgSave(keepDir string) *MsgSave {
 	} else {
 		log.Fatal("check", keepDir)
 	}
-	return &MsgSave{keepDir, make(map[string]*FileInfo)}
+
+	msg := &MsgSave{keepDir, sync.Map{}}
+	go func() {
+		for {
+			time.Sleep(60 * time.Second)
+			now := time.Now().Unix()
+			msg.MapFiles.Range(func(k, v interface{}) bool {
+				fileInfo := v.(*FileInfo)
+				if now-fileInfo.LastWriteTime >= fileCloseTime {
+					fileInfo.FileHander.Close()
+					log.Println("close file", fileInfo.key)
+					msg.MapFiles.Delete(k)
+					return false
+				}
+				return true
+			})
+		}
+	}()
+	return msg
 }
 
 func PathExists(path string) (bool, error) {
@@ -63,9 +82,11 @@ func PathExists(path string) (bool, error) {
 
 func (msgsave *MsgSave) Save(msg model.RpcMsg, reply *model.Reply) error {
 	key := msg.AppName + msg.HostIp + msg.DirName + msg.FileName
-	fileItem, ok := msgsave.Files[key]
+
+	vd, ok := msgsave.MapFiles.Load(key)
 	if ok {
 		//exists
+		fileItem := vd.(*FileInfo)
 		n, err := fileItem.FileHander.Write(msg.FileContent)
 		if err != nil {
 			log.Println("write error", err)
@@ -83,7 +104,7 @@ func (msgsave *MsgSave) Save(msg model.RpcMsg, reply *model.Reply) error {
 			log.Println("Write length ", n)
 		}
 
-		msgsave.Files[key] = filenew
+		msgsave.MapFiles.Store(key, filenew)
 		log.Println("create ", key)
 	}
 
