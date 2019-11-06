@@ -99,6 +99,7 @@ func NewFileChanges(appName, fileName string) *FileChanges {
 
 					if err != nil {
 						fc.FileHander = nil
+						log.Println("open file error", err)
 						continue
 					}
 
