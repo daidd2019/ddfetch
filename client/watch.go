@@ -20,7 +20,7 @@ var g_filter = regexp.MustCompile("log$")
 
 var g_file_hander_maxtime = 10 * time.Minute
 var g_file_close_maxtime = 6 * time.Hour
-var g_buffsize = 4096
+var g_buffsize int64 = 4096
 
 type FileChanges struct {
 	AppName     string
@@ -110,12 +110,15 @@ func NewFileChanges(appName, fileName string) *FileChanges {
 
 					stat, _ := fc.FileHander.Stat()
 					size := stat.Size()
-					if fc.Pos == 0 && size > 1024 {
+					log.Println(fileName, "fc.Pos", fc.Pos, "size", size)
+					if fc.Pos == 0 && size > g_buffsize {
 						fc.Pos = size
 						fc.FileHander.Seek(0, os.SEEK_END)
 						continue
-					} else if size <= fc.Pos {
+					} else if size < fc.Pos {
 						fc.FileHander.Seek(0, os.SEEK_SET)
+					} else if size == fc.Pos {
+						continue
 					}
 					readlen, _ := fc.FileHander.Read(buffer)
 
@@ -196,7 +199,7 @@ func (fm *AppWatch) Init(ip, appname, basedir, filter string, buffsize int) {
 
 	g_rpcaddress = ip
 	g_filter = regexp.MustCompile(filter)
-	g_buffsize = buffsize
+	g_buffsize = int64(buffsize)
 }
 
 func (fm *AppWatch) process_event(event fsnotify.Event) {
