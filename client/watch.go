@@ -224,7 +224,7 @@ func (fm *AppWatch) process_event(event fsnotify.Event) {
 		}
 
 	case fsnotify.Write:
-		if g_filter.MatchString(event.Name) {
+		if !strings.HasPrefix(event.Name, ".") && g_filter.MatchString(event.Name) {
 			if v, ok := fm.files.Load(event.Name); ok {
 				fc := v.(*FileChanges)
 				fc.NotifyWrited()
